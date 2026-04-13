@@ -14,7 +14,6 @@ RUN rm -rf /root/.cache/huggingface || true
 COPY data/ ./data/
 COPY src/ ./src/
 COPY run_server.py .
-COPY .env .
 
 EXPOSE 8000
 
