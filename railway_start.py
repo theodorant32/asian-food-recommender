@@ -178,70 +178,37 @@ async def proxy_favicon(request: Request) -> Response:
 async def websocket_proxy(ws: WebSocket):
     """Proxy WebSocket connections to Streamlit."""
     import asyncio
-    import socket
-    import struct
+    import aiohttp
 
     await ws.accept()
 
-    # Create non-blocking socket
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.setblocking(False)
-
     try:
-        # Connect to Streamlit
-        sock.connect_ex(('127.0.0.1', STREAMLIT_PORT))
-        await asyncio.sleep(0.1)
+        async with aiohttp.ClientSession() as session:
+            async with session.ws_connect(
+                f"ws://127.0.0.1:{STREAMLIT_PORT}/_stcore/stream",
+                headers={"Origin": f"http://127.0.0.1:{STREAMLIT_PORT}"},
+            ) as streamlit_ws:
 
-        # WebSocket handshake
-        key = "s3pEpqLbpq43Hj2kNDXxVw=="
-        handshake = (
-            f"GET /_stcore/stream HTTP/1.1\r\n"
-            f"Host: 127.0.0.1:{STREAMLIT_PORT}\r\n"
-            f"Upgrade: websocket\r\n"
-            f"Connection: Upgrade\r\n"
-            f"Sec-WebSocket-Key: {key}\r\n"
-            f"Sec-WebSocket-Version: 13\r\n"
-            f"Sec-WebSocket-Protocol: streamlit\r\n"
-            f"\r\n"
-        ).encode()
+                async def ws_to_streamlit():
+                    try:
+                        async for data in ws.iter_text():
+                            await streamlit_ws.send_str(data)
+                    except Exception:
+                        pass
 
-        sock.sendall(handshake)
-        await asyncio.sleep(0.1)
-        response = sock.recv(4096)
+                async def streamlit_to_ws():
+                    try:
+                        async for data in streamlit_ws:
+                            if data.type == aiohttp.WSMsgType.TEXT:
+                                await ws.send_text(data.data)
+                            elif data.type == aiohttp.WSMsgType.BINARY:
+                                await ws.send_bytes(data.data)
+                    except Exception:
+                        pass
 
-        async def forward_client_to_server():
-            while True:
-                try:
-                    data = await ws.receive()
-                    if isinstance(data, str):
-                        data = data.encode('utf-8')
-                    # Send as WebSocket frame (unmasked, client->server)
-                    frame = bytearray([0x81, len(data) & 0x7F]) + bytearray(data)
-                    sock.sendall(frame)
-                except Exception:
-                    break
-
-        async def forward_server_to_client():
-            while True:
-                try:
-                    header = sock.recv(2)
-                    if not header or len(header) < 2:
-                        break
-                    length = header[1] & 0x7F
-                    payload = sock.recv(length) if length > 0 else b''
-                    if payload:
-                        await ws.send(payload)
-                except Exception:
-                    break
-
-        await asyncio.gather(forward_client_to_server(), forward_server_to_client())
+                await asyncio.gather(ws_to_streamlit(), streamlit_to_ws())
     except Exception as e:
-        logger.error(f"WebSocket proxy error: {e}")
-    finally:
-        try:
-            sock.close()
-        except Exception:
-            pass
+        logger.error(f"WebSocket proxy: {e}")
         try:
             await ws.close()
         except Exception:
