@@ -44,8 +44,6 @@ def run_streamlit() -> None:
     env["STREAMLIT_BROWSER_SERVER_ADDRESS"] = "localhost"
     env["STREAMLIT_SERVER_RUNONSAVE"] = "false"
     env["STREAMLIT_SERVER_ENABLE_CORS"] = "false"
-    # Critical: Set baseUrlPath for proxy routing
-    env["STREAMLIT_SERVER_BASEURLPATH"] = "app"
 
     try:
         streamlit_process = subprocess.Popen(
@@ -63,8 +61,6 @@ def run_streamlit() -> None:
                 "true",
                 "--browser.gatherUsageStats",
                 "false",
-                "--server.baseUrlPath",
-                "app",
             ],
             env=env,
             stdout=subprocess.PIPE,
@@ -73,20 +69,17 @@ def run_streamlit() -> None:
 
         for i in range(60):
             time.sleep(0.5)
-            # Try both paths - baseUrlPath may affect health endpoint location
-            for health_path in ["/_stcore/health", "/app/_stcore/health"]:
-                try:
-                    resp = httpx.get(f"http://localhost:{STREAMLIT_PORT}{health_path}", timeout=2)
-                    if resp.status_code == 200:
-                        logger.info(f"Streamlit started successfully (attempt {i+1}, path={health_path})")
-                        streamlit_ready = True
-                        return
-                except httpx.ConnectError:
-                    pass
-                except Exception as e:
-                    logger.warning(f"Health check on {health_path}: {e}")
-            if (i + 1) % 10 == 0:
-                logger.info(f"Streamlit still starting... (attempt {i+1}/60)")
+            try:
+                resp = httpx.get(f"http://localhost:{STREAMLIT_PORT}/_stcore/health", timeout=2)
+                if resp.status_code == 200:
+                    logger.info(f"Streamlit started successfully (attempt {i+1})")
+                    streamlit_ready = True
+                    return
+            except httpx.ConnectError:
+                if (i + 1) % 10 == 0:
+                    logger.info(f"Streamlit still starting... (attempt {i+1}/60)")
+            except Exception as e:
+                logger.warning(f"Health check error: {e}")
 
         logger.error("Streamlit failed to start after 30 seconds")
 
