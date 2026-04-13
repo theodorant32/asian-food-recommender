@@ -174,41 +174,37 @@ async def proxy_favicon(request: Request) -> Response:
 async def websocket_proxy(ws: WebSocket):
     """Proxy WebSocket connections to Streamlit."""
     import asyncio
+    import websockets
     try:
         await ws.accept()
-        # Connect to Streamlit's WebSocket using httpx
-        async with httpx.AsyncClient() as client:
-            async with client.websocket_connect(
-                f"ws://localhost:{STREAMLIT_PORT}/_stcore/stream",
-                subprotocols=["streamlit"],
-            ) as streamlit_ws:
-                async def ws_to_streamlit():
-                    try:
-                        while True:
-                            data = await ws.receive()
-                            if isinstance(data, str):
-                                await streamlit_ws.send_text(data)
-                            else:
-                                await streamlit_ws.send_bytes(data)
-                    except WebSocketDisconnect:
-                        pass
-                    except Exception:
-                        pass
+        # Connect to Streamlit's WebSocket - subprotocols is now a single value or list
+        async with websockets.connect(
+            f"ws://127.0.0.1:{STREAMLIT_PORT}/_stcore/stream",
+            additional_headers={
+                "Origin": f"http://localhost:{STREAMLIT_PORT}",
+            },
+        ) as streamlit_ws:
+            async def ws_to_streamlit():
+                try:
+                    while True:
+                        data = await ws.receive()
+                        await streamlit_ws.send(data)
+                except WebSocketDisconnect:
+                    pass
+                except Exception:
+                    pass
 
-                async def streamlit_to_ws():
-                    try:
-                        while True:
-                            data = await streamlit_ws.receive()
-                            if isinstance(data, str):
-                                await ws.send_text(data)
-                            else:
-                                await ws.send_bytes(data)
-                    except WebSocketDisconnect:
-                        pass
-                    except Exception:
-                        pass
+            async def streamlit_to_ws():
+                try:
+                    while True:
+                        data = await streamlit_ws.recv()
+                        await ws.send(data)
+                except WebSocketDisconnect:
+                    pass
+                except Exception:
+                    pass
 
-                await asyncio.gather(ws_to_streamlit(), streamlit_to_ws())
+            await asyncio.gather(ws_to_streamlit(), streamlit_to_ws())
     except Exception as e:
         logger.exception(f"WebSocket error: {e}")
         try:
