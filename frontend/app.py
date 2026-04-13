@@ -15,7 +15,9 @@ import plotly.graph_objects as go
 from typing import Optional
 
 # Configuration
-API_BASE_URL = "http://localhost:8000"
+import os
+PORT = int(os.environ.get("PORT", 8000))
+API_BASE_URL = os.environ.get("API_URL", f"http://localhost:{PORT}")
 
 st.set_page_config(
     page_title="Asian Food Intelligence Explorer",
