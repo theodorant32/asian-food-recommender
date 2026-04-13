@@ -177,9 +177,15 @@ async def websocket_proxy(ws: WebSocket):
     import websockets
     try:
         await ws.accept()
-        # Connect to Streamlit's WebSocket using websockets library
+        # Get origin header for proper CORS handling
+        origin = ws.headers.get("origin", f"http://localhost:{STREAMLIT_PORT}")
+        # Connect to Streamlit's WebSocket with proper headers
         async with websockets.connect(
             f"ws://localhost:{STREAMLIT_PORT}/_stcore/stream",
+            extra_headers={
+                "Origin": origin,
+                "User-Agent": ws.headers.get("user-agent", "Mozilla/5.0"),
+            },
             subprotocols=["streamlit"],
             close_timeout=1,
             ping_interval=20,
@@ -188,7 +194,7 @@ async def websocket_proxy(ws: WebSocket):
             async def ws_to_streamlit():
                 try:
                     while True:
-                        data = await ws.receive_text()
+                        data = await ws.receive()
                         await streamlit_ws.send(data)
                 except WebSocketDisconnect:
                     pass
@@ -199,13 +205,19 @@ async def websocket_proxy(ws: WebSocket):
                 try:
                     while True:
                         data = await streamlit_ws.recv()
-                        await ws.send_text(data)
+                        await ws.send(data)
                 except WebSocketDisconnect:
                     pass
                 except Exception:
                     pass
 
             await asyncio.gather(ws_to_streamlit(), streamlit_to_ws())
+    except websockets.exceptions.InvalidStatusCode as e:
+        logger.error(f"WebSocket connection failed: {e.status_code}")
+        try:
+            await ws.close()
+        except Exception:
+            pass
     except Exception as e:
         logger.exception(f"WebSocket error: {e}")
         try:
