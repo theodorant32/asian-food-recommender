@@ -10,9 +10,10 @@ from typing import Optional
 
 import httpx
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket
 from fastapi.responses import JSONResponse, Response
 from loguru import logger
+from starlette.websockets import WebSocketDisconnect
 
 from src.api.main import app
 
@@ -151,6 +152,49 @@ async def proxy_streamlit_get(request: Request, path: str = "") -> Response:
 async def proxy_streamlit_post(request: Request, path: str = "") -> Response:
     """Proxy POST requests to Streamlit."""
     return _proxy_to_streamlit(request, path, "POST")
+
+
+@app.websocket("/app/_stcore/stream")
+@app.websocket("/app/_stcore/_main")
+async def websocket_proxy(ws: WebSocket):
+    """Proxy WebSocket connections to Streamlit."""
+    try:
+        await ws.accept()
+        # Connect to Streamlit's WebSocket
+        async with httpx.AsyncClient() as client:
+            # Forward messages between client and Streamlit
+            async with client.websocket_connect(
+                f"ws://localhost:{STREAMLIT_PORT}/_stcore/stream",
+                subprotocols=["streamlit"]
+            ) as streamlit_ws:
+                import asyncio
+                async def ws_to_streamlit():
+                    try:
+                        while True:
+                            data = await ws.receive_text()
+                            await streamlit_ws.send_text(data)
+                    except WebSocketDisconnect:
+                        pass
+                    except Exception:
+                        pass
+
+                async def streamlit_to_ws():
+                    try:
+                        while True:
+                            data = await streamlit_ws.receive_text()
+                            await ws.send_text(data)
+                    except WebSocketDisconnect:
+                        pass
+                    except Exception:
+                        pass
+
+                await asyncio.gather(ws_to_streamlit(), streamlit_to_ws())
+    except Exception as e:
+        logger.exception(f"WebSocket error: {e}")
+        try:
+            await ws.close()
+        except Exception:
+            pass
 
 
 @app.get("/healthz")
