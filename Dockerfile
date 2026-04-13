@@ -2,17 +2,20 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install Python deps
+# Copy requirements and install
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy app code (no models)
-COPY . .
+# Clear torch cache
+RUN rm -rf /root/.cache/torch || true
+RUN rm -rf /root/.cache/huggingface || true
 
-# Make startup script executable
-RUN chmod +x start.sh
+# Copy only necessary files
+COPY data/ ./data/
+COPY src/ ./src/
+COPY run_server.py .
+COPY .env .
 
 EXPOSE 8000
 
-# Download model at startup, not build time
-CMD ["./start.sh"]
+CMD ["python", "run_server.py"]

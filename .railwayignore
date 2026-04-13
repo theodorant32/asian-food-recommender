@@ -1,8 +1,6 @@
+venv/
 __pycache__/
 *.pyc
-.git/
-.env
-venv/
 .pytest_cache/
 *.log
 logs/
@@ -10,4 +8,3 @@ models/
 *.pth
 *.bin
 *.pt
-*.onnx

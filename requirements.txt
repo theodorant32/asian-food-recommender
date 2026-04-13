@@ -4,12 +4,13 @@ uvicorn[standard]>=0.27.0
 pydantic>=2.5.0
 pydantic-settings>=2.1.0
 
-# ML & Embeddings
+# ML - CPU only torch (much smaller)
+torch --index-url https://download.pytorch.org/whl/cpu
 sentence-transformers>=2.2.0
-numpy>=1.26.0
-scikit-learn>=1.4.0
 
 # Retrieval
+numpy>=1.26.0
+scikit-learn>=1.4.0
 faiss-cpu>=1.7.4
 rank-bm25>=0.2.2
 
