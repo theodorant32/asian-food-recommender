@@ -98,8 +98,9 @@ def _proxy_to_streamlit(request: Request, path: str, method: str) -> Response:
         )
 
     try:
-        # Streamlit serves at root, we're proxying /app/* to its root
-        url = f"http://localhost:{STREAMLIT_PORT}/{path}" if path else f"http://localhost:{STREAMLIT_PORT}/"
+        # Streamlit is configured with baseUrlPath=app, so it serves at /app internally
+        # We proxy /app/* to Streamlit's /app/*
+        url = f"http://localhost:{STREAMLIT_PORT}/app/{path}" if path else f"http://localhost:{STREAMLIT_PORT}/app"
 
         proxy_headers = {
             k: v for k, v in request.headers.items()
