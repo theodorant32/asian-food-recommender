@@ -38,8 +38,6 @@ ENV/
 .env.local
 
 # Data
-data/*.json
-!data/.gitkeep
 *.pkl
 *.faiss
 
