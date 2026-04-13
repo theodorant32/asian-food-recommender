@@ -211,6 +211,12 @@ async def healthz():
     }
 
 
+@app.get("/favicon.ico")
+async def favicon():
+    """Return empty favicon to avoid 500 errors."""
+    return Response(content="", status_code=204, media_type="image/x-icon")
+
+
 @app.get("/debug/streamlit")
 async def debug_streamlit():
     """Debug endpoint to test Streamlit connectivity."""
@@ -238,7 +244,8 @@ if __name__ == "__main__":
     streamlit_thread = threading.Thread(target=run_streamlit, daemon=True)
     streamlit_thread.start()
 
-    time.sleep(10)
+    # Wait longer for Streamlit to fully initialize with baseUrlPath
+    time.sleep(20)
 
     if not streamlit_ready:
         logger.warning("Streamlit not ready, starting API anyway")
