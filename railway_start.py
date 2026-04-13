@@ -105,6 +105,8 @@ async def _proxy_to_streamlit(request: Request, path: str, method: str) -> Respo
         url = f"http://localhost:{STREAMLIT_PORT}/{path}" if path else f"http://localhost:{STREAMLIT_PORT}/"
 
         try:
+            logger.debug(f"Proxying {method} {url}")
+
             proxy_headers = {
                 k: v for k, v in request.headers.items()
                 if k.lower() not in ["host", "content-length", "content-type", "origin", "referer"]
@@ -121,6 +123,8 @@ async def _proxy_to_streamlit(request: Request, path: str, method: str) -> Respo
                 follow_redirects=True,
                 timeout=30.0,
             )
+
+            logger.debug(f"Streamlit responded with {response.status_code}")
 
             return StreamingResponse(
                 response.aiter_bytes(),
