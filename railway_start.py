@@ -98,7 +98,7 @@ def _proxy_to_streamlit(request: Request, path: str, method: str) -> Response:
         )
 
     try:
-        url = f"http://localhost:{STREAMLIT_PORT}/app/{path}" if path else "http://localhost:{STREAMLIT_PORT}/app/"
+        url = f"http://localhost:{STREAMLIT_PORT}/app/{path}" if path else f"http://localhost:{STREAMLIT_PORT}/app/"
 
         proxy_headers = {
             k: v for k, v in request.headers.items()
