@@ -73,19 +73,20 @@ def run_streamlit() -> None:
 
         for i in range(60):
             time.sleep(0.5)
-            try:
-                # baseUrlPath affects URL generation, not actual binding - health is at /_stcore/health
-                resp = httpx.get(f"http://localhost:{STREAMLIT_PORT}/_stcore/health", timeout=2)
-                if resp.status_code == 200:
-                    logger.info(f"Streamlit started successfully (attempt {i+1})")
-                    streamlit_ready = True
-                    return
-            except httpx.ConnectError:
-                if (i + 1) % 10 == 0:
-                    logger.info(f"Streamlit still starting... (attempt {i+1}/60)")
-            except Exception as e:
-                logger.warning(f"Unexpected error checking Streamlit: {e}")
-                continue
+            # Try both paths - baseUrlPath may affect health endpoint location
+            for health_path in ["/_stcore/health", "/app/_stcore/health"]:
+                try:
+                    resp = httpx.get(f"http://localhost:{STREAMLIT_PORT}{health_path}", timeout=2)
+                    if resp.status_code == 200:
+                        logger.info(f"Streamlit started successfully (attempt {i+1}, path={health_path})")
+                        streamlit_ready = True
+                        return
+                except httpx.ConnectError:
+                    pass
+                except Exception as e:
+                    logger.warning(f"Health check on {health_path}: {e}")
+            if (i + 1) % 10 == 0:
+                logger.info(f"Streamlit still starting... (attempt {i+1}/60)")
 
         logger.error("Streamlit failed to start after 30 seconds")
 
