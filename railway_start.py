@@ -91,7 +91,7 @@ def run_streamlit() -> None:
         logger.exception(f"Streamlit failed to start: {e}")
 
 
-def _proxy_to_streamlit(request: Request, path: str, method: str) -> Response:
+async def _proxy_to_streamlit(request: Request, path: str, method: str) -> Response:
     """Forward request to Streamlit backend."""
     if not streamlit_ready:
         return JSONResponse(
@@ -101,7 +101,6 @@ def _proxy_to_streamlit(request: Request, path: str, method: str) -> Response:
 
     try:
         # Proxy /app/* to Streamlit's root /
-        # For _stcore endpoints, we need to strip the /app prefix
         if path.startswith("_stcore/"):
             url = f"http://localhost:{STREAMLIT_PORT}/{path}"
         else:
@@ -114,7 +113,7 @@ def _proxy_to_streamlit(request: Request, path: str, method: str) -> Response:
 
         body = None
         if method in ["POST", "PUT", "PATCH"]:
-            body = bytes(request.body())
+            body = await request.body()
 
         with httpx.Client() as client:
             response = client.request(
@@ -127,7 +126,6 @@ def _proxy_to_streamlit(request: Request, path: str, method: str) -> Response:
                 timeout=30.0,
             )
 
-        # Return response as-is, preserving compression
         return Response(
             content=response.content,
             status_code=response.status_code,
@@ -151,45 +149,45 @@ def _proxy_to_streamlit(request: Request, path: str, method: str) -> Response:
 @app.get("/app/{path:path}")
 async def proxy_streamlit_get(request: Request, path: str = "") -> Response:
     """Proxy GET requests to Streamlit."""
-    return _proxy_to_streamlit(request, path, "GET")
+    return await _proxy_to_streamlit(request, path, "GET")
 
 
 @app.post("/app")
 @app.post("/app/{path:path}")
 async def proxy_streamlit_post(request: Request, path: str = "") -> Response:
     """Proxy POST requests to Streamlit."""
-    return _proxy_to_streamlit(request, path, "POST")
+    return await _proxy_to_streamlit(request, path, "POST")
 
 
 @app.get("/static/{path:path}")
 async def proxy_static_assets(request: Request, path: str) -> Response:
     """Proxy static assets (JS, CSS, images) from Streamlit."""
-    return _proxy_to_streamlit(request, f"static/{path}", "GET")
+    return await _proxy_to_streamlit(request, f"static/{path}", "GET")
 
 
 @app.get("/favicon.png")
 async def proxy_favicon(request: Request) -> Response:
     """Proxy favicon from Streamlit."""
-    return _proxy_to_streamlit(request, "favicon.png", "GET")
+    return await _proxy_to_streamlit(request, "favicon.png", "GET")
 
 
 # HTTP polling endpoints for Streamlit fallback
 @app.post("/app/_stcore/message")
 async def proxy_message(request: Request) -> Response:
     """Proxy HTTP polling messages."""
-    return _proxy_to_streamlit(request, "_stcore/message", "POST")
+    return await _proxy_to_streamlit(request, "_stcore/message", "POST")
 
 
 @app.get("/app/_stcore/message")
 async def proxy_message_get(request: Request) -> Response:
     """Proxy HTTP polling messages GET."""
-    return _proxy_to_streamlit(request, "_stcore/message", "GET")
+    return await _proxy_to_streamlit(request, "_stcore/message", "GET")
 
 
 @app.post("/app/_stcore/_main")
 async def proxy_main(request: Request) -> Response:
     """Proxy main endpoint."""
-    return _proxy_to_streamlit(request, "_stcore/_main", "POST")
+    return await _proxy_to_streamlit(request, "_stcore/_main", "POST")
 
 
 @app.websocket("/app/_stcore/stream")
