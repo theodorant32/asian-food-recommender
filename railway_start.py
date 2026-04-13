@@ -176,18 +176,9 @@ async def proxy_favicon(request: Request) -> Response:
 @app.websocket("/app/_stcore/stream")
 @app.websocket("/app/_stcore/_main")
 async def websocket_proxy(ws: WebSocket):
-    """Proxy WebSocket connections to Streamlit."""
+    """Close WebSocket to force Streamlit HTTP polling fallback."""
     await ws.accept()
-    try:
-        while True:
-            data = await ws.receive_text()
-            # Echo back to keep connection alive
-            await ws.send_text(data)
-    except Exception:
-        try:
-            await ws.close()
-        except Exception:
-            pass
+    await ws.close()
 
 
 @app.get("/healthz")
