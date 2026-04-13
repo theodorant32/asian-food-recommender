@@ -71,18 +71,29 @@ def run_streamlit() -> None:
             stderr=subprocess.PIPE,
         )
 
-        for _ in range(60):
+        for i in range(60):
             time.sleep(0.5)
             try:
-                resp = httpx.get(f"http://localhost:{STREAMLIT_PORT}/_stcore/health", timeout=2)
+                # With baseUrlPath=app, health endpoint is at /app/_stcore/health
+                resp = httpx.get(f"http://localhost:{STREAMLIT_PORT}/app/_stcore/health", timeout=2)
                 if resp.status_code == 200:
-                    logger.info("Streamlit started successfully")
+                    logger.info(f"Streamlit started successfully (attempt {i+1})")
                     streamlit_ready = True
                     return
-            except Exception:
+            except httpx.ConnectError as e:
+                if (i + 1) % 10 == 0:
+                    logger.info(f"Streamlit still starting... (attempt {i+1}/60)")
+            except Exception as e:
+                logger.warning(f"Unexpected error checking Streamlit: {e}")
                 continue
 
-        logger.warning("Streamlit startup timeout")
+        # Log stderr output for debugging
+        if streamlit_process and streamlit_process.stderr:
+            stderr_output = streamlit_process.stderr.read().decode('utf-8', errors='ignore')
+            if stderr_output:
+                logger.error(f"Streamlit stderr: {stderr_output[:500]}")
+
+        logger.error("Streamlit failed to start after 30 seconds")
 
     except Exception as e:
         logger.exception(f"Streamlit failed to start: {e}")
@@ -224,7 +235,8 @@ async def debug_streamlit():
         return {"error": "Streamlit not ready"}
     try:
         with httpx.Client() as client:
-            resp = client.get(f"http://localhost:{STREAMLIT_PORT}/_stcore/health", timeout=5)
+            # With baseUrlPath=app, health endpoint is at /app/_stcore/health
+            resp = client.get(f"http://localhost:{STREAMLIT_PORT}/app/_stcore/health", timeout=5)
             return {
                 "status": "ok",
                 "streamlit_health": resp.status_code,
