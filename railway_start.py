@@ -44,6 +44,10 @@ def run_streamlit() -> None:
     env["STREAMLIT_BROWSER_SERVER_ADDRESS"] = "localhost"
     env["STREAMLIT_SERVER_RUNONSAVE"] = "false"
     env["STREAMLIT_SERVER_ENABLE_CORS"] = "false"
+    # Use HTTP polling instead of WebSockets for better proxy compatibility
+    env["STREAMLIT_SERVER_HEADLESS"] = "true"
+    env["STREAMLIT_BROWSER_SERVER_ADDRESS"] = "localhost"
+    env["STREAMLIT_BROWSER_SERVER_PORT"] = str(STREAMLIT_PORT)
 
     try:
         streamlit_process = subprocess.Popen(
@@ -174,32 +178,70 @@ async def proxy_favicon(request: Request) -> Response:
 async def websocket_proxy(ws: WebSocket):
     """Proxy WebSocket connections to Streamlit."""
     import asyncio
-    import websockets
+    import socket
+    import struct
+
+    await ws.accept()
+
+    # Create non-blocking socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setblocking(False)
+
     try:
-        await ws.accept()
-        async with websockets.connect(
-            f"ws://127.0.0.1:{STREAMLIT_PORT}/_stcore/stream",
-            additional_headers={"Origin": f"http://127.0.0.1:{STREAMLIT_PORT}"},
-        ) as streamlit_ws:
-            async def ws_to_streamlit():
-                try:
-                    while True:
-                        data = await ws.receive()
-                        await streamlit_ws.send(data)
-                except Exception:
-                    pass
+        # Connect to Streamlit
+        sock.connect_ex(('127.0.0.1', STREAMLIT_PORT))
+        await asyncio.sleep(0.1)
 
-            async def streamlit_to_ws():
-                try:
-                    while True:
-                        data = await streamlit_ws.recv()
-                        await ws.send(data)
-                except Exception:
-                    pass
+        # WebSocket handshake
+        key = "s3pEpqLbpq43Hj2kNDXxVw=="
+        handshake = (
+            f"GET /_stcore/stream HTTP/1.1\r\n"
+            f"Host: 127.0.0.1:{STREAMLIT_PORT}\r\n"
+            f"Upgrade: websocket\r\n"
+            f"Connection: Upgrade\r\n"
+            f"Sec-WebSocket-Key: {key}\r\n"
+            f"Sec-WebSocket-Version: 13\r\n"
+            f"Sec-WebSocket-Protocol: streamlit\r\n"
+            f"\r\n"
+        ).encode()
 
-            await asyncio.gather(ws_to_streamlit(), streamlit_to_ws())
+        sock.sendall(handshake)
+        await asyncio.sleep(0.1)
+        response = sock.recv(4096)
+
+        async def forward_client_to_server():
+            while True:
+                try:
+                    data = await ws.receive()
+                    if isinstance(data, str):
+                        data = data.encode('utf-8')
+                    # Send as WebSocket frame (unmasked, client->server)
+                    frame = bytearray([0x81, len(data) & 0x7F]) + bytearray(data)
+                    sock.sendall(frame)
+                except Exception:
+                    break
+
+        async def forward_server_to_client():
+            while True:
+                try:
+                    header = sock.recv(2)
+                    if not header or len(header) < 2:
+                        break
+                    length = header[1] & 0x7F
+                    payload = sock.recv(length) if length > 0 else b''
+                    if payload:
+                        await ws.send(payload)
+                except Exception:
+                    break
+
+        await asyncio.gather(forward_client_to_server(), forward_server_to_client())
     except Exception as e:
-        logger.error(f"WebSocket proxy: {e}")
+        logger.error(f"WebSocket proxy error: {e}")
+    finally:
+        try:
+            sock.close()
+        except Exception:
+            pass
         try:
             await ws.close()
         except Exception:
