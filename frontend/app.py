@@ -16,13 +16,32 @@ from typing import Optional
 
 # Configuration
 import os
+import socket
+
 PORT = int(os.environ.get("PORT", 8000))
-API_BASE_URL = os.environ.get("API_URL", f"http://localhost:{PORT}")
+
+# Detect if running behind proxy (Railway) or locally
+def _get_api_base_url():
+    """Get API base URL - use relative path when proxied, absolute when local."""
+    env_url = os.environ.get("API_URL")
+    if env_url:
+        return env_url
+    # Check if running in Railway (proxied)
+    if os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("PORT"):
+        return ""  # Use relative URLs
+    return f"http://localhost:{PORT}"
+
+API_BASE_URL = _get_api_base_url()
 
 st.set_page_config(
     page_title="Asian Food Intelligence Explorer",
     page_icon="🍜",
     layout="wide",
+    menu_items={
+        'Get Help': 'https://github.com/theodorant32/asian-food-recommender',
+        'Report a bug': 'https://github.com/theodorant32/asian-food-recommender/issues',
+        'About': "# Asian Food Intelligence Explorer\nA ML-powered recommendation system for Asian cuisine."
+    }
 )
 
 # Custom CSS for better styling
