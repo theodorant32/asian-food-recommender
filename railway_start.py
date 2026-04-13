@@ -146,13 +146,13 @@ async def _proxy_request(request: Request, path: str, method: str) -> Response:
             )
 
 
-@app.get("/api/status")
-async def api_status():
-    """Return service status for debugging."""
+@app.get("/healthz")
+async def healthz():
+    """Liveness probe for Kubernetes/Railway."""
     return {
-        "api": "ok",
+        "status": "ok",
+        "api": "ready",
         "streamlit": "ready" if streamlit_ready else "starting",
-        "streamlit_port": STREAMLIT_PORT,
     }
 
 
