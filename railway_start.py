@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.responses import StreamingResponse
 import httpx
+from loguru import logger
 
 from src.api.main import app
 
@@ -32,19 +33,25 @@ def run_streamlit():
     ])
 
 # Mount Streamlit at /app path
-@app.api_route("/app", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
-@app.api_route("/app/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+@app.get("/app")
+@app.get("/app/{path:path}")
+@app.post("/app")
+@app.post("/app/{path:path}")
 async def proxy_streamlit(request: Request, path: str = ""):
     """Proxy requests to Streamlit."""
     async with httpx.AsyncClient() as client:
-        url = f"http://127.0.0.1:{STREAMLIT_PORT}/{path}" if path else f"http://127.0.0.1:{STREAMLIT_PORT}/"
+        base_url = f"http://127.0.0.1:{STREAMLIT_PORT}"
+        url = f"{base_url}/{path}" if path else base_url
 
-        # Forward the request
         try:
+            # Build headers (exclude host)
+            proxy_headers = {k: v for k, v in request.headers.items() if k.lower() not in ["host", "content-length"]}
+
+            # Make the request
             response = await client.request(
                 method=request.method,
                 url=url,
-                headers=[(k, v) for k, v in request.headers.items() if k.lower() != "host"],
+                headers=proxy_headers,
                 content=await request.body(),
                 params=request.query_params,
                 follow_redirects=True,
@@ -56,8 +63,11 @@ async def proxy_streamlit(request: Request, path: str = ""):
                 status_code=response.status_code,
                 headers=dict(response.headers),
             )
+        except httpx.ConnectError:
+            return {"error": "Streamlit is starting up, please refresh"}
         except Exception as e:
-            return {"error": f"Streamlit proxy error: {str(e)}"}
+            logger.error(f"Proxy error: {e}")
+            return {"error": f"Proxy error: {str(e)}"}
 
 if __name__ == "__main__":
     print("Starting Asian Food Intelligence Explorer...")
