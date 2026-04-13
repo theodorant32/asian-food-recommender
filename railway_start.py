@@ -118,14 +118,20 @@ async def _proxy_to_streamlit(request: Request, path: str, method: str) -> Respo
                 headers=proxy_headers,
                 content=body,
                 params=request.query_params,
-                follow_redirects=False,
+                follow_redirects=True,
                 timeout=30.0,
             )
+
+            # Filter out Streamlit-specific headers that might cause issues
+            response_headers = {
+                k: v for k, v in response.headers.items()
+                if k.lower() not in ["content-length", "transfer-encoding"]
+            }
 
             return StreamingResponse(
                 response.aiter_bytes(),
                 status_code=response.status_code,
-                headers=dict(response.headers),
+                headers=response_headers,
             )
         except httpx.ConnectError as e:
             logger.error(f"Cannot connect to Streamlit: {e}")
