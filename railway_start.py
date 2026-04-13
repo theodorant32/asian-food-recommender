@@ -157,6 +157,18 @@ async def proxy_streamlit_post(request: Request, path: str = "") -> Response:
     return _proxy_to_streamlit(request, path, "POST")
 
 
+@app.get("/static/{path:path}")
+async def proxy_static_assets(request: Request, path: str) -> Response:
+    """Proxy static assets (JS, CSS, images) from Streamlit."""
+    return _proxy_to_streamlit(request, f"static/{path}", "GET")
+
+
+@app.get("/favicon.png")
+async def proxy_favicon(request: Request) -> Response:
+    """Proxy favicon from Streamlit."""
+    return _proxy_to_streamlit(request, "favicon.png", "GET")
+
+
 @app.websocket("/app/_stcore/stream")
 @app.websocket("/app/_stcore/_main")
 async def websocket_proxy(ws: WebSocket):
