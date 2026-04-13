@@ -173,6 +173,25 @@ async def proxy_favicon(request: Request) -> Response:
     return _proxy_to_streamlit(request, "favicon.png", "GET")
 
 
+# HTTP polling endpoints for Streamlit fallback
+@app.post("/app/_stcore/message")
+async def proxy_message(request: Request) -> Response:
+    """Proxy HTTP polling messages."""
+    return _proxy_to_streamlit(request, "_stcore/message", "POST")
+
+
+@app.get("/app/_stcore/message")
+async def proxy_message_get(request: Request) -> Response:
+    """Proxy HTTP polling messages GET."""
+    return _proxy_to_streamlit(request, "_stcore/message", "GET")
+
+
+@app.post("/app/_stcore/_main")
+async def proxy_main(request: Request) -> Response:
+    """Proxy main endpoint."""
+    return _proxy_to_streamlit(request, "_stcore/_main", "POST")
+
+
 @app.websocket("/app/_stcore/stream")
 @app.websocket("/app/_stcore/_main")
 async def websocket_proxy(ws: WebSocket):
