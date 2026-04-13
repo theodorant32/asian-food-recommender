@@ -93,7 +93,11 @@ def _proxy_to_streamlit(request: Request, path: str, method: str) -> Response:
 
     try:
         # Proxy /app/* to Streamlit's root /
-        url = f"http://localhost:{STREAMLIT_PORT}/{path}" if path else f"http://localhost:{STREAMLIT_PORT}/"
+        # For _stcore endpoints, we need to strip the /app prefix
+        if path.startswith("_stcore/"):
+            url = f"http://localhost:{STREAMLIT_PORT}/{path}"
+        else:
+            url = f"http://localhost:{STREAMLIT_PORT}/{path}" if path else f"http://localhost:{STREAMLIT_PORT}/"
 
         proxy_headers = {
             k: v for k, v in request.headers.items()
