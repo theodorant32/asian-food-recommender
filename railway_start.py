@@ -173,6 +173,23 @@ async def healthz():
     }
 
 
+@app.get("/debug/streamlit")
+async def debug_streamlit():
+    """Debug endpoint to test Streamlit connectivity."""
+    if not streamlit_ready:
+        return {"error": "Streamlit not ready"}
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(f"http://localhost:{STREAMLIT_PORT}/_stcore/health", timeout=5)
+            return {
+                "status": "ok",
+                "streamlit_health": resp.status_code,
+                "content": resp.text[:200] if resp.text else "empty",
+            }
+    except Exception as e:
+        return {"error": str(e)}
+
+
 if __name__ == "__main__":
     logger.info("Starting Asian Food Intelligence Explorer...")
 
