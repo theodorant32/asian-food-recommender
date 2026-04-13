@@ -1,31 +1,14 @@
-# Core
 fastapi>=0.109.0
 uvicorn[standard]>=0.27.0
 pydantic>=2.5.0
 pydantic-settings>=2.1.0
-
-# ML - CPU only torch (much smaller)
-torch --index-url https://download.pytorch.org/whl/cpu
-sentence-transformers>=2.2.0
-
-# Retrieval
 numpy>=1.26.0
 scikit-learn>=1.4.0
-faiss-cpu>=1.7.4
 rank-bm25>=0.2.2
-
-# Data
 pandas>=2.2.0
-
-# Frontend
+loguru>=0.7.0
+python-dotenv>=1.0.0
 streamlit>=1.30.0
 plotly>=5.18.0
-
-# Testing
 pytest>=7.4.0
-pytest-asyncio>=0.23.0
 httpx>=0.26.0
-
-# Utilities
-python-dotenv>=1.0.0
-loguru>=0.7.0

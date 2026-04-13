@@ -1,11 +1,11 @@
-"""Embedding service for dish embeddings."""
+"""Embedding service using simple hash-based embeddings."""
 
 import numpy as np
 from loguru import logger
 
 from src.models.dish import Dish
 from src.services.dish_repository import DishRepository
-from src.utils.embeddings import EmbeddingModel
+from src.utils.embeddings import encode_texts
 
 
 class EmbeddingService:
@@ -22,7 +22,7 @@ class EmbeddingService:
         texts = [d.get_search_text() for d in dishes]
 
         logger.info(f"Computing embeddings for {len(texts)} dishes...")
-        embeddings = EmbeddingModel.encode_texts(texts)
+        embeddings = encode_texts(texts)
 
         self._embeddings = {}
         self._dish_index = {}
@@ -48,5 +48,5 @@ class EmbeddingService:
         return self._dish_index.get(index)
 
     def encode_query(self, query: str) -> np.ndarray:
-        embeddings = EmbeddingModel.encode_texts([query])
+        embeddings = encode_texts([query])
         return embeddings[0]
