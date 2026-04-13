@@ -11,9 +11,8 @@ from typing import Optional
 import httpx
 import uvicorn
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response
 from loguru import logger
-from starlette.responses import Response
 
 from src.api.main import app
 
@@ -22,6 +21,7 @@ STREAMLIT_HOST = "0.0.0.0"
 
 streamlit_ready: bool = False
 streamlit_process: Optional[subprocess.Popen] = None
+httpx_client: Optional[httpx.Client] = None
 
 
 def run_streamlit() -> None:
@@ -72,11 +72,10 @@ def run_streamlit() -> None:
             stderr=subprocess.PIPE,
         )
 
-        # Wait for Streamlit to start
         for _ in range(60):
             time.sleep(0.5)
             try:
-                resp = httpx.get(f"http://{STREAMLIT_HOST}:{STREAMLIT_PORT}/_stcore/health", timeout=2)
+                resp = httpx.get(f"http://localhost:{STREAMLIT_PORT}/_stcore/health", timeout=2)
                 if resp.status_code == 200:
                     logger.info("Streamlit started successfully")
                     streamlit_ready = True
@@ -85,86 +84,75 @@ def run_streamlit() -> None:
                 continue
 
         logger.warning("Streamlit startup timeout")
-        if streamlit_process and streamlit_process.stderr:
-            stderr_output = streamlit_process.stderr.read().decode()
-            if stderr_output:
-                logger.error(f"Streamlit stderr: {stderr_output[:500]}")
 
     except Exception as e:
         logger.exception(f"Streamlit failed to start: {e}")
 
 
-async def _proxy_to_streamlit(request: Request, path: str, method: str) -> Response:
-    """Forward request to Streamlit backend."""
+def _proxy_to_streamlit(request: Request, path: str, method: str) -> Response:
+    """Forward request to Streamlit backend using synchronous client."""
     if not streamlit_ready:
         return JSONResponse(
             status_code=503,
-            content={"error": "Frontend is starting up, please refresh in a few seconds"},
+            content={"error": "Frontend is starting up, please refresh"},
         )
 
-    async with httpx.AsyncClient() as client:
-        url = f"http://localhost:{STREAMLIT_PORT}/{path}" if path else f"http://localhost:{STREAMLIT_PORT}/"
+    try:
+        url = f"http://localhost:{STREAMLIT_PORT}/app/{path}" if path else "http://localhost:{STREAMLIT_PORT}/app/"
 
-        try:
-            logger.debug(f"Proxying {method} {url}")
+        proxy_headers = {
+            k: v for k, v in request.headers.items()
+            if k.lower() not in ["host", "content-length", "content-type", "origin", "referer", "connection"]
+        }
 
-            proxy_headers = {
-                k: v for k, v in request.headers.items()
-                if k.lower() not in ["host", "content-length", "content-type", "origin", "referer"]
-            }
+        body = None
+        if method in ["POST", "PUT", "PATCH"]:
+            body = bytes(request.body())
 
-            body = await request.body() if method in ["POST", "PUT", "PATCH"] else None
-
-            response = await client.request(
+        with httpx.Client() as client:
+            response = client.request(
                 method=method,
                 url=url,
                 headers=proxy_headers,
                 content=body,
-                params=request.query_params,
+                params=dict(request.query_params),
                 follow_redirects=True,
                 timeout=30.0,
             )
 
-            logger.debug(f"Streamlit responded with {response.status_code}")
-
-            return StreamingResponse(
-                response.aiter_bytes(),
-                status_code=response.status_code,
-                headers=dict(response.headers),
-            )
-        except httpx.ConnectError as e:
-            logger.error(f"Cannot connect to Streamlit: {e}")
-            streamlit_ready = False
-            return JSONResponse(
-                status_code=503,
-                content={"error": "Frontend unavailable, please refresh"},
-            )
-        except httpx.HTTPStatusError as e:
-            logger.error(f"Streamlit returned error: {e}")
-            return JSONResponse(
-                status_code=e.response.status_code,
-                content={"error": "Frontend error"},
-            )
-        except Exception as e:
-            logger.exception(f"Proxy error: {e}")
-            return JSONResponse(
-                status_code=500,
-                content={"error": f"Proxy error: {str(e)}"},
-            )
+        return Response(
+            content=response.content,
+            status_code=response.status_code,
+            headers={k: v for k, v in response.headers.items() if k.lower() not in ["content-length", "transfer-encoding"]},
+        )
+    except httpx.ConnectError as e:
+        logger.error(f"Cannot connect to Streamlit: {e}")
+        global streamlit_ready
+        streamlit_ready = False
+        return JSONResponse(
+            status_code=503,
+            content={"error": "Frontend unavailable, please refresh"},
+        )
+    except Exception as e:
+        logger.exception(f"Proxy error: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Proxy error: {str(e)}"},
+        )
 
 
 @app.get("/app/{path:path}")
 @app.get("/app")
 async def proxy_streamlit_get(request: Request, path: str = "") -> Response:
     """Proxy GET requests to Streamlit."""
-    return await _proxy_to_streamlit(request, path, "GET")
+    return _proxy_to_streamlit(request, path, "GET")
 
 
 @app.post("/app/{path:path}")
 @app.post("/app")
 async def proxy_streamlit_post(request: Request, path: str = "") -> Response:
     """Proxy POST requests to Streamlit."""
-    return await _proxy_to_streamlit(request, path, "POST")
+    return _proxy_to_streamlit(request, path, "POST")
 
 
 @app.get("/healthz")
@@ -183,8 +171,8 @@ async def debug_streamlit():
     if not streamlit_ready:
         return {"error": "Streamlit not ready"}
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(f"http://localhost:{STREAMLIT_PORT}/_stcore/health", timeout=5)
+        with httpx.Client() as client:
+            resp = client.get(f"http://localhost:{STREAMLIT_PORT}/_stcore/health", timeout=5)
             return {
                 "status": "ok",
                 "streamlit_health": resp.status_code,
@@ -201,15 +189,12 @@ if __name__ == "__main__":
     logger.info(f"API will be on port {port}")
     logger.info(f"Streamlit will be accessible at /app path")
 
-    # Start Streamlit in background thread
     streamlit_thread = threading.Thread(target=run_streamlit, daemon=True)
     streamlit_thread.start()
 
-    # Give Streamlit time to start
     time.sleep(10)
 
     if not streamlit_ready:
         logger.warning("Streamlit not ready, starting API anyway")
 
-    # Run API in foreground
     uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
