@@ -46,6 +46,7 @@ def run_streamlit() -> None:
     env["STREAMLIT_BROWSER_SERVER_ADDRESS"] = "localhost"
     env["STREAMLIT_SERVER_RUNONSAVE"] = "false"
     env["STREAMLIT_SERVER_ENABLE_CORS"] = "false"
+    env["STREAMLIT_SERVER_BASEURLPATH"] = "app"
 
     try:
         streamlit_process = subprocess.Popen(
