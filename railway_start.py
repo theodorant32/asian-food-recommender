@@ -74,24 +74,18 @@ def run_streamlit() -> None:
         for i in range(60):
             time.sleep(0.5)
             try:
-                # With baseUrlPath=app, health endpoint is at /app/_stcore/health
-                resp = httpx.get(f"http://localhost:{STREAMLIT_PORT}/app/_stcore/health", timeout=2)
+                # baseUrlPath affects URL generation, not actual binding - health is at /_stcore/health
+                resp = httpx.get(f"http://localhost:{STREAMLIT_PORT}/_stcore/health", timeout=2)
                 if resp.status_code == 200:
                     logger.info(f"Streamlit started successfully (attempt {i+1})")
                     streamlit_ready = True
                     return
-            except httpx.ConnectError as e:
+            except httpx.ConnectError:
                 if (i + 1) % 10 == 0:
                     logger.info(f"Streamlit still starting... (attempt {i+1}/60)")
             except Exception as e:
                 logger.warning(f"Unexpected error checking Streamlit: {e}")
                 continue
-
-        # Log stderr output for debugging
-        if streamlit_process and streamlit_process.stderr:
-            stderr_output = streamlit_process.stderr.read().decode('utf-8', errors='ignore')
-            if stderr_output:
-                logger.error(f"Streamlit stderr: {stderr_output[:500]}")
 
         logger.error("Streamlit failed to start after 30 seconds")
 
@@ -155,15 +149,15 @@ def _proxy_to_streamlit(request: Request, path: str, method: str) -> Response:
         )
 
 
-@app.get("/app/{path:path}")
 @app.get("/app")
+@app.get("/app/{path:path}")
 async def proxy_streamlit_get(request: Request, path: str = "") -> Response:
     """Proxy GET requests to Streamlit."""
     return _proxy_to_streamlit(request, path, "GET")
 
 
-@app.post("/app/{path:path}")
 @app.post("/app")
+@app.post("/app/{path:path}")
 async def proxy_streamlit_post(request: Request, path: str = "") -> Response:
     """Proxy POST requests to Streamlit."""
     return _proxy_to_streamlit(request, path, "POST")
