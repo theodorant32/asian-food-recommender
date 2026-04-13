@@ -7,8 +7,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY data/ ./data/
 COPY src/ ./src/
-COPY run_server.py .
+COPY frontend/ ./frontend/
+COPY railway_start.py .
 
 EXPOSE 8000
 
-CMD ["python", "run_server.py"]
+CMD ["python", "railway_start.py"]
