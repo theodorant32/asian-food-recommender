@@ -125,13 +125,14 @@ async def _proxy_to_streamlit(request: Request, path: str, method: str) -> Respo
             # Filter out Streamlit-specific headers that might cause issues
             response_headers = {
                 k: v for k, v in response.headers.items()
-                if k.lower() not in ["content-length", "transfer-encoding"]
+                if k.lower() not in ["content-length", "transfer-encoding", "server"]
             }
 
-            return StreamingResponse(
-                response.aiter_bytes(),
+            return Response(
+                content=response.content,
                 status_code=response.status_code,
                 headers=response_headers,
+                media_type=response.headers.get("content-type", "text/html"),
             )
         except httpx.ConnectError as e:
             logger.error(f"Cannot connect to Streamlit: {e}")
@@ -148,15 +149,15 @@ async def _proxy_to_streamlit(request: Request, path: str, method: str) -> Respo
             )
 
 
-@app.get("/app")
 @app.get("/app/{path:path}")
+@app.get("/app")
 async def proxy_streamlit_get(request: Request, path: str = "") -> Response:
     """Proxy GET requests to Streamlit."""
     return await _proxy_to_streamlit(request, path, "GET")
 
 
-@app.post("/app")
 @app.post("/app/{path:path}")
+@app.post("/app")
 async def proxy_streamlit_post(request: Request, path: str = "") -> Response:
     """Proxy POST requests to Streamlit."""
     return await _proxy_to_streamlit(request, path, "POST")
