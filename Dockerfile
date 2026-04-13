@@ -2,15 +2,17 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install dependencies
+# Install Python deps
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application
+# Copy app code (no models)
 COPY . .
 
-# Expose ports
-EXPOSE 8000 8501
+# Make startup script executable
+RUN chmod +x start.sh
 
-# Default command: start API server
-CMD ["python", "run_server.py"]
+EXPOSE 8000
+
+# Download model at startup, not build time
+CMD ["./start.sh"]
