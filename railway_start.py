@@ -122,17 +122,10 @@ async def _proxy_to_streamlit(request: Request, path: str, method: str) -> Respo
                 timeout=30.0,
             )
 
-            # Filter out Streamlit-specific headers that might cause issues
-            response_headers = {
-                k: v for k, v in response.headers.items()
-                if k.lower() not in ["content-length", "transfer-encoding", "server"]
-            }
-
-            return Response(
-                content=response.content,
+            return StreamingResponse(
+                response.aiter_bytes(),
                 status_code=response.status_code,
-                headers=response_headers,
-                media_type=response.headers.get("content-type", "text/html"),
+                headers=dict(response.headers),
             )
         except httpx.ConnectError as e:
             logger.error(f"Cannot connect to Streamlit: {e}")
@@ -140,6 +133,12 @@ async def _proxy_to_streamlit(request: Request, path: str, method: str) -> Respo
             return JSONResponse(
                 status_code=503,
                 content={"error": "Frontend unavailable, please refresh"},
+            )
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Streamlit returned error: {e}")
+            return JSONResponse(
+                status_code=e.response.status_code,
+                content={"error": "Frontend error"},
             )
         except Exception as e:
             logger.exception(f"Proxy error: {e}")
