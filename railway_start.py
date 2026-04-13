@@ -44,6 +44,8 @@ def run_streamlit() -> None:
     env["STREAMLIT_BROWSER_SERVER_ADDRESS"] = "localhost"
     env["STREAMLIT_SERVER_RUNONSAVE"] = "false"
     env["STREAMLIT_SERVER_ENABLE_CORS"] = "false"
+    # Critical: Set baseUrlPath for proxy routing
+    env["STREAMLIT_SERVER_BASEURLPATH"] = "app"
 
     try:
         streamlit_process = subprocess.Popen(
@@ -61,6 +63,8 @@ def run_streamlit() -> None:
                 "true",
                 "--browser.gatherUsageStats",
                 "false",
+                "--server.baseUrlPath",
+                "app",
             ],
             env=env,
             stdout=subprocess.PIPE,
