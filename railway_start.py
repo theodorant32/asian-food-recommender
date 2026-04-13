@@ -127,8 +127,6 @@ def _proxy_to_streamlit(request: Request, path: str, method: str) -> Response:
         )
     except httpx.ConnectError as e:
         logger.error(f"Cannot connect to Streamlit: {e}")
-        global streamlit_ready
-        streamlit_ready = False
         return JSONResponse(
             status_code=503,
             content={"error": "Frontend unavailable, please refresh"},
