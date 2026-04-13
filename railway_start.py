@@ -21,7 +21,6 @@ STREAMLIT_HOST = "0.0.0.0"
 
 streamlit_ready: bool = False
 streamlit_process: Optional[subprocess.Popen] = None
-httpx_client: Optional[httpx.Client] = None
 
 
 def run_streamlit() -> None:
@@ -41,8 +40,6 @@ def run_streamlit() -> None:
     env["STREAMLIT_SERVER_FOLDER_WATCH"] = "false"
     env["STREAMLIT_GLOBAL_DEVELOPMENT_MODE"] = "false"
     env["STREAMLIT_GLOBAL_LOG_LEVEL"] = "error"
-    env["STREAMLIT_GLOBAL_UNIT_TEST"] = "false"
-    env["STREAMLIT_RUNNER_MAGIC_ENABLE"] = "false"
     env["STREAMLIT_BROWSER_SERVER_ADDRESS"] = "localhost"
     env["STREAMLIT_SERVER_RUNONSAVE"] = "false"
     env["STREAMLIT_SERVER_ENABLE_CORS"] = "false"
@@ -63,8 +60,6 @@ def run_streamlit() -> None:
                 "true",
                 "--browser.gatherUsageStats",
                 "false",
-                "--logger.level",
-                "error",
             ],
             env=env,
             stdout=subprocess.PIPE,
@@ -89,7 +84,7 @@ def run_streamlit() -> None:
 
 
 def _proxy_to_streamlit(request: Request, path: str, method: str) -> Response:
-    """Forward request to Streamlit backend using synchronous client."""
+    """Forward request to Streamlit backend."""
     if not streamlit_ready:
         return JSONResponse(
             status_code=503,
@@ -97,12 +92,12 @@ def _proxy_to_streamlit(request: Request, path: str, method: str) -> Response:
         )
 
     try:
-        # Streamlit serves at root, we proxy /app/* to its root /
+        # Proxy /app/* to Streamlit's root /
         url = f"http://localhost:{STREAMLIT_PORT}/{path}" if path else f"http://localhost:{STREAMLIT_PORT}/"
 
         proxy_headers = {
             k: v for k, v in request.headers.items()
-            if k.lower() not in ["host", "content-length", "content-type", "origin", "referer", "connection"]
+            if k.lower() not in ["host", "content-length", "content-type", "origin", "referer", "connection", "accept-encoding"]
         }
 
         body = None
@@ -120,10 +115,11 @@ def _proxy_to_streamlit(request: Request, path: str, method: str) -> Response:
                 timeout=30.0,
             )
 
+        # Return response as-is, preserving compression
         return Response(
             content=response.content,
             status_code=response.status_code,
-            headers={k: v for k, v in response.headers.items() if k.lower() not in ["content-length", "transfer-encoding"]},
+            headers={k: v for k, v in response.headers.items() if k.lower() not in ["content-length", "transfer-encoding", "content-encoding"]},
         )
     except httpx.ConnectError as e:
         logger.error(f"Cannot connect to Streamlit: {e}")
