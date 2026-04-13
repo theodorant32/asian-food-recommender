@@ -174,89 +174,32 @@ async def proxy_favicon(request: Request) -> Response:
 async def websocket_proxy(ws: WebSocket):
     """Proxy WebSocket connections to Streamlit."""
     import asyncio
-    import socket
-
-    await ws.accept()
-
-    # Create raw TCP socket connection to Streamlit
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(5)
-
+    import websockets
     try:
-        sock.connect(("127.0.0.1", STREAMLIT_PORT))
+        await ws.accept()
+        async with websockets.connect(
+            f"ws://127.0.0.1:{STREAMLIT_PORT}/_stcore/stream",
+            additional_headers={"Origin": f"http://127.0.0.1:{STREAMLIT_PORT}"},
+        ) as streamlit_ws:
+            async def ws_to_streamlit():
+                try:
+                    while True:
+                        data = await ws.receive()
+                        await streamlit_ws.send(data)
+                except Exception:
+                    pass
 
-        # Send WebSocket handshake
-        key = "dGhlIHNhbXBsZSBub25jZQ=="
-        handshake = (
-            f"GET /_stcore/stream HTTP/1.1\r\n"
-            f"Host: 127.0.0.1:{STREAMLIT_PORT}\r\n"
-            "Upgrade: websocket\r\n"
-            "Connection: Upgrade\r\n"
-            f"Sec-WebSocket-Key: {key}\r\n"
-            "Sec-WebSocket-Version: 13\r\n"
-            "Sec-WebSocket-Protocol: streamlit\r\n"
-            "Origin: http://localhost\r\n"
-            "\r\n"
-        ).encode()
+            async def streamlit_to_ws():
+                try:
+                    while True:
+                        data = await streamlit_ws.recv()
+                        await ws.send(data)
+                except Exception:
+                    pass
 
-        sock.sendall(handshake)
-        response = sock.recv(4096)  # Read handshake response
-
-        async def forward_to_streamlit():
-            try:
-                while True:
-                    data = await ws.receive_text()
-                    # Send as WebSocket text frame (opcode 0x01)
-                    frame = bytearray()
-                    frame.append(0x81)  # FIN + text opcode
-                    payload = data.encode('utf-8')
-                    if len(payload) <= 125:
-                        frame.append(len(payload))
-                        frame.append(0x00)  # Unmasked
-                        frame.extend(payload)
-                    else:
-                        frame.append(0x7E)
-                        frame.extend(len(payload).to_bytes(2, 'big'))
-                        frame.append(0x00)
-                        frame.extend(payload)
-                    sock.sendall(frame)
-            except Exception:
-                pass
-
-        async def forward_from_streamlit():
-            try:
-                while True:
-                    # Read WebSocket frame from Streamlit
-                    header = sock.recv(2)
-                    if len(header) < 2:
-                        break
-                    opcode = header[0] & 0x0F
-                    length = header[1] & 0x7F
-
-                    if length == 126:
-                        length = int.from_bytes(sock.recv(2), 'big')
-                    elif length == 127:
-                        length = int.from_bytes(sock.recv(8), 'big')
-
-                    payload = sock.recv(length) if length > 0 else b''
-
-                    if opcode == 0x01:  # Text
-                        await ws.send_text(payload.decode('utf-8'))
-                    elif opcode == 0x02:  # Binary
-                        await ws.send_bytes(payload)
-                    elif opcode == 0x08:  # Close
-                        break
-            except Exception:
-                pass
-
-        await asyncio.gather(forward_to_streamlit(), forward_from_streamlit())
+            await asyncio.gather(ws_to_streamlit(), streamlit_to_ws())
     except Exception as e:
-        logger.exception(f"WebSocket error: {e}")
-    finally:
-        try:
-            sock.close()
-        except Exception:
-            pass
+        logger.error(f"WebSocket proxy: {e}")
         try:
             await ws.close()
         except Exception:
