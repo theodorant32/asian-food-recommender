@@ -54,6 +54,9 @@ class FlavorTag(str, Enum):
     FRESH = "fresh"
     NUTTY = "nutty"
     PEPPERY = "peppery"
+    LEMONGRASS = "lemongrass"
+    ANISE = "anise"
+    GRASSY = "grassy"
 
 
 class TasteProfile(BaseModel):
