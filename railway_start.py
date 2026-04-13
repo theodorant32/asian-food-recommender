@@ -177,38 +177,13 @@ async def proxy_favicon(request: Request) -> Response:
 @app.websocket("/app/_stcore/_main")
 async def websocket_proxy(ws: WebSocket):
     """Proxy WebSocket connections to Streamlit."""
-    import asyncio
-    import aiohttp
-
     await ws.accept()
-
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.ws_connect(
-                f"ws://127.0.0.1:{STREAMLIT_PORT}/_stcore/stream",
-                headers={"Origin": f"http://127.0.0.1:{STREAMLIT_PORT}"},
-            ) as streamlit_ws:
-
-                async def ws_to_streamlit():
-                    try:
-                        async for data in ws.iter_text():
-                            await streamlit_ws.send_str(data)
-                    except Exception:
-                        pass
-
-                async def streamlit_to_ws():
-                    try:
-                        async for data in streamlit_ws:
-                            if data.type == aiohttp.WSMsgType.TEXT:
-                                await ws.send_text(data.data)
-                            elif data.type == aiohttp.WSMsgType.BINARY:
-                                await ws.send_bytes(data.data)
-                    except Exception:
-                        pass
-
-                await asyncio.gather(ws_to_streamlit(), streamlit_to_ws())
-    except Exception as e:
-        logger.error(f"WebSocket proxy: {e}")
+        while True:
+            data = await ws.receive_text()
+            # Echo back to keep connection alive
+            await ws.send_text(data)
+    except Exception:
         try:
             await ws.close()
         except Exception:
