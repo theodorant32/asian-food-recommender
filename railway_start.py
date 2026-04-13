@@ -46,7 +46,6 @@ def run_streamlit() -> None:
     env["STREAMLIT_BROWSER_SERVER_ADDRESS"] = "localhost"
     env["STREAMLIT_SERVER_RUNONSAVE"] = "false"
     env["STREAMLIT_SERVER_ENABLE_CORS"] = "false"
-    env["STREAMLIT_SERVER_BASEURLPATH"] = "app"
 
     try:
         streamlit_process = subprocess.Popen(
@@ -98,9 +97,8 @@ def _proxy_to_streamlit(request: Request, path: str, method: str) -> Response:
         )
 
     try:
-        # Streamlit is configured with baseUrlPath=app, so it serves at /app internally
-        # We proxy /app/* to Streamlit's /app/*
-        url = f"http://localhost:{STREAMLIT_PORT}/app/{path}" if path else f"http://localhost:{STREAMLIT_PORT}/app"
+        # Streamlit serves at root, we proxy /app/* to its root /
+        url = f"http://localhost:{STREAMLIT_PORT}/{path}" if path else f"http://localhost:{STREAMLIT_PORT}/"
 
         proxy_headers = {
             k: v for k, v in request.headers.items()
