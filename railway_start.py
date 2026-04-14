@@ -192,57 +192,41 @@ async def proxy_main(request: Request) -> Response:
 
 @app.websocket("/app/_stcore/stream")
 async def websocket_proxy(ws: WebSocket):
-    """Proxy WebSocket connections to Streamlit using raw socket."""
+    """Proxy WebSocket connections to Streamlit."""
     import asyncio
-    import socket
+    try:
+        import websockets
+    except ImportError:
+        await ws.close()
+        return
 
     await ws.accept()
 
-    # Connect to Streamlit's WebSocket
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(10)
-
     try:
-        sock.connect(('127.0.0.1', STREAMLIT_PORT))
+        async with websockets.connect(
+            f"ws://127.0.0.1:{STREAMLIT_PORT}/_stcore/stream",
+            close_timeout=5,
+            ping_interval=20,
+            ping_timeout=10,
+        ) as streamlit_ws:
+            async def client_to_streamlit():
+                try:
+                    async for message in ws.iter_text():
+                        await streamlit_ws.send(message)
+                except Exception:
+                    pass
 
-        # Read HTTP 101 Switching Protocols response
-        sock.recv(4096)
+            async def streamlit_to_client():
+                try:
+                    async for message in streamlit_ws:
+                        await ws.send_text(message)
+                except Exception:
+                    pass
 
-        async def client_to_streamlit():
-            try:
-                while True:
-                    data = await ws.receive()
-                    if isinstance(data, str):
-                        data = data.encode('utf-8')
-                    # WebSocket frame: FIN=1, opcode=binary(0x02), no mask
-                    frame = bytearray([0x82, len(data)]) + bytearray(data)
-                    sock.sendall(frame)
-            except Exception:
-                pass
-
-        async def streamlit_to_client():
-            try:
-                while True:
-                    header = sock.recv(2)
-                    if len(header) < 2:
-                        break
-                    length = header[1] & 0x7F
-                    if length == 126:
-                        length = int.from_bytes(sock.recv(2), 'big')
-                    payload = sock.recv(length) if length > 0 else b''
-                    if payload:
-                        await ws.send_bytes(payload)
-            except Exception:
-                pass
-
-        await asyncio.gather(client_to_streamlit(), streamlit_to_client())
+            await asyncio.gather(client_to_streamlit(), streamlit_to_client())
     except Exception as e:
         logger.error(f"WebSocket proxy error: {e}")
     finally:
-        try:
-            sock.close()
-        except Exception:
-            pass
         try:
             await ws.close()
         except Exception:
