@@ -108,7 +108,7 @@ async def _proxy_to_streamlit(request: Request, path: str, method: str) -> Respo
 
         proxy_headers = {
             k: v for k, v in request.headers.items()
-            if k.lower() not in ["host", "content-length", "content-type", "origin", "referer", "connection", "accept-encoding"]
+            if k.lower() not in ["host", "content-length", "connection", "accept-encoding"]
         }
 
         body = None
