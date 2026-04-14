@@ -10,6 +10,9 @@ COPY src/ ./src/
 COPY frontend/ ./frontend/
 COPY railway_start.py .
 
+# Copy Streamlit config to root level where Streamlit expects it
+RUN mkdir -p .streamlit && cp frontend/.streamlit/config.toml .streamlit/
+
 EXPOSE 8000
 
 CMD ["python", "railway_start.py"]
