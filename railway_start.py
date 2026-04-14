@@ -190,12 +190,8 @@ async def proxy_main(request: Request) -> Response:
     return await _proxy_to_streamlit(request, "_stcore/_main", "POST")
 
 
-@app.websocket("/app/_stcore/stream")
-@app.websocket("/app/_stcore/_main")
-async def websocket_proxy(ws: WebSocket):
-    """Close WebSocket to force Streamlit HTTP polling fallback."""
-    await ws.accept()
-    await ws.close()
+# WebSocket proxy removed - Streamlit uses HTTP polling only
+# This avoids WebSocket connection issues through Railway proxy
 
 
 @app.get("/healthz")
@@ -219,17 +215,15 @@ async def debug_streamlit():
     """Debug endpoint to test Streamlit connectivity."""
     if not streamlit_ready:
         return {"error": "Streamlit not ready"}
-    try:
-        with httpx.Client() as client:
-            # With baseUrlPath=app, health endpoint is at /app/_stcore/health
-            resp = client.get(f"http://localhost:{STREAMLIT_PORT}/app/_stcore/health", timeout=5)
-            return {
-                "status": "ok",
-                "streamlit_health": resp.status_code,
-                "content": resp.text[:200] if resp.text else "empty",
-            }
-    except Exception as e:
-        return {"error": str(e)}
+    results = {}
+    with httpx.Client() as client:
+        for path in ["/_stcore/health", "/app/_stcore/health", "/stream"]:
+            try:
+                resp = client.get(f"http://localhost:{STREAMLIT_PORT}{path}", timeout=5)
+                results[path] = {"status": resp.status_code, "content": resp.text[:100] if resp.text else "empty"}
+            except Exception as e:
+                results[path] = {"error": str(e)}
+    return results
 
 
 if __name__ == "__main__":
