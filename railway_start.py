@@ -201,6 +201,50 @@ async def proxy_health(request: Request) -> Response:
     return await _proxy_to_streamlit(request, "_stcore/health", "GET")
 
 
+@app.websocket("/app/_stcore/stream")
+async def websocket_proxy(ws: WebSocket):
+    """Proxy WebSocket connections to Streamlit."""
+    import asyncio
+    try:
+        import websockets
+    except ImportError:
+        await ws.close()
+        return
+
+    await ws.accept()
+
+    try:
+        async with websockets.connect(
+            f"ws://127.0.0.1:{STREAMLIT_PORT}/_stcore/stream",
+            close_timeout=5,
+            ping_interval=20,
+            ping_timeout=10,
+            max_size=10 * 1024 * 1024,  # 10MB max message size
+        ) as streamlit_ws:
+            async def client_to_streamlit():
+                try:
+                    async for message in ws.iter_text():
+                        await streamlit_ws.send(message)
+                except Exception:
+                    pass
+
+            async def streamlit_to_client():
+                try:
+                    async for message in streamlit_ws:
+                        await ws.send_text(message)
+                except Exception:
+                    pass
+
+            await asyncio.gather(client_to_streamlit(), streamlit_to_client())
+    except Exception as e:
+        logger.error(f"WebSocket proxy error: {e}")
+    finally:
+        try:
+            await ws.close()
+        except Exception:
+            pass
+
+
 @app.get("/healthz")
 async def healthz():
     """Liveness probe for Railway."""
