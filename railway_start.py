@@ -203,38 +203,37 @@ async def proxy_health(request: Request) -> Response:
 
 @app.websocket("/app/_stcore/stream")
 async def websocket_proxy(ws: WebSocket):
-    """Proxy WebSocket connections to Streamlit."""
+    """Proxy WebSocket connections to Streamlit using aiohttp."""
     import asyncio
-    import websockets
+    import aiohttp
 
     await ws.accept()
 
     try:
-        # Connect to Streamlit's WebSocket with proper subprotocol
-        streamlit_ws = await websockets.connect(
-            f"ws://127.0.0.1:{STREAMLIT_PORT}/_stcore/stream",
-            subprotocols=["streamlit"],
-            close_timeout=5,
-            ping_interval=20,
-            ping_timeout=10,
-            max_size=10 * 1024 * 1024,
-        )
+        async with aiohttp.ClientSession() as session:
+            async with session.ws_connect(
+                f"ws://127.0.0.1:{STREAMLIT_PORT}/_stcore/stream",
+                heartbeat=20,
+            ) as streamlit_ws:
 
-        async def client_to_streamlit():
-            try:
-                async for message in ws.iter_text():
-                    await streamlit_ws.send(message)
-            except Exception:
-                pass
+                async def client_to_streamlit():
+                    try:
+                        async for message in ws.iter_text():
+                            await streamlit_ws.send_str(message)
+                    except Exception:
+                        pass
 
-        async def streamlit_to_client():
-            try:
-                async for message in streamlit_ws:
-                    await ws.send_text(message)
-            except Exception:
-                pass
+                async def streamlit_to_client():
+                    try:
+                        async for message in streamlit_ws:
+                            if message.type == aiohttp.WSMsgType.TEXT:
+                                await ws.send_text(message.data)
+                            elif message.type == aiohttp.WSMsgType.BINARY:
+                                await ws.send_bytes(message.data)
+                    except Exception:
+                        pass
 
-        await asyncio.gather(client_to_streamlit(), streamlit_to_client())
+                await asyncio.gather(client_to_streamlit(), streamlit_to_client())
     except Exception as e:
         logger.error(f"WebSocket proxy error: {e}")
     finally:
