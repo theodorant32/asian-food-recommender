@@ -205,37 +205,36 @@ async def proxy_health(request: Request) -> Response:
 async def websocket_proxy(ws: WebSocket):
     """Proxy WebSocket connections to Streamlit."""
     import asyncio
-    try:
-        import websockets
-    except ImportError:
-        await ws.close()
-        return
+    import websockets
 
     await ws.accept()
 
     try:
-        async with websockets.connect(
+        # Connect to Streamlit's WebSocket with proper subprotocol
+        streamlit_ws = await websockets.connect(
             f"ws://127.0.0.1:{STREAMLIT_PORT}/_stcore/stream",
+            subprotocols=["streamlit"],
             close_timeout=5,
             ping_interval=20,
             ping_timeout=10,
-            max_size=10 * 1024 * 1024,  # 10MB max message size
-        ) as streamlit_ws:
-            async def client_to_streamlit():
-                try:
-                    async for message in ws.iter_text():
-                        await streamlit_ws.send(message)
-                except Exception:
-                    pass
+            max_size=10 * 1024 * 1024,
+        )
 
-            async def streamlit_to_client():
-                try:
-                    async for message in streamlit_ws:
-                        await ws.send_text(message)
-                except Exception:
-                    pass
+        async def client_to_streamlit():
+            try:
+                async for message in ws.iter_text():
+                    await streamlit_ws.send(message)
+            except Exception:
+                pass
 
-            await asyncio.gather(client_to_streamlit(), streamlit_to_client())
+        async def streamlit_to_client():
+            try:
+                async for message in streamlit_ws:
+                    await ws.send_text(message)
+            except Exception:
+                pass
+
+        await asyncio.gather(client_to_streamlit(), streamlit_to_client())
     except Exception as e:
         logger.error(f"WebSocket proxy error: {e}")
     finally:
