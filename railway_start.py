@@ -44,10 +44,9 @@ def run_streamlit() -> None:
     env["STREAMLIT_BROWSER_SERVER_ADDRESS"] = "localhost"
     env["STREAMLIT_SERVER_RUNONSAVE"] = "false"
     env["STREAMLIT_SERVER_ENABLE_CORS"] = "false"
-    # Use HTTP polling instead of WebSockets for better proxy compatibility
-    env["STREAMLIT_SERVER_HEADLESS"] = "true"
-    env["STREAMLIT_BROWSER_SERVER_ADDRESS"] = "localhost"
-    env["STREAMLIT_BROWSER_SERVER_PORT"] = str(STREAMLIT_PORT)
+    env["STREAMLIT_SERVER_ENABLE_WEBSOCKET_COMPRESSION"] = "false"
+    # Force HTTP polling mode for better proxy compatibility
+    env["STREAMLIT_SERVER_ENABLE_WEBSOCKET"] = "false"
 
     try:
         streamlit_process = subprocess.Popen(
