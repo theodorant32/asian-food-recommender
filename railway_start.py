@@ -190,8 +190,63 @@ async def proxy_main(request: Request) -> Response:
     return await _proxy_to_streamlit(request, "_stcore/_main", "POST")
 
 
-# WebSocket proxy removed - Streamlit uses HTTP polling only
-# This avoids WebSocket connection issues through Railway proxy
+@app.websocket("/app/_stcore/stream")
+async def websocket_proxy(ws: WebSocket):
+    """Proxy WebSocket connections to Streamlit using raw socket."""
+    import asyncio
+    import socket
+
+    await ws.accept()
+
+    # Connect to Streamlit's WebSocket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(10)
+
+    try:
+        sock.connect(('127.0.0.1', STREAMLIT_PORT))
+
+        # Read HTTP 101 Switching Protocols response
+        sock.recv(4096)
+
+        async def client_to_streamlit():
+            try:
+                while True:
+                    data = await ws.receive()
+                    if isinstance(data, str):
+                        data = data.encode('utf-8')
+                    # WebSocket frame: FIN=1, opcode=binary(0x02), no mask
+                    frame = bytearray([0x82, len(data)]) + bytearray(data)
+                    sock.sendall(frame)
+            except Exception:
+                pass
+
+        async def streamlit_to_client():
+            try:
+                while True:
+                    header = sock.recv(2)
+                    if len(header) < 2:
+                        break
+                    length = header[1] & 0x7F
+                    if length == 126:
+                        length = int.from_bytes(sock.recv(2), 'big')
+                    payload = sock.recv(length) if length > 0 else b''
+                    if payload:
+                        await ws.send_bytes(payload)
+            except Exception:
+                pass
+
+        await asyncio.gather(client_to_streamlit(), streamlit_to_client())
+    except Exception as e:
+        logger.error(f"WebSocket proxy error: {e}")
+    finally:
+        try:
+            sock.close()
+        except Exception:
+            pass
+        try:
+            await ws.close()
+        except Exception:
+            pass
 
 
 @app.get("/healthz")
